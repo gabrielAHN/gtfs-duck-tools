@@ -1,0 +1,33 @@
+CREATE TABLE calendar AS SELECT * FROM calendar_raw;
+DROP TABLE calendar_raw;
+
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS service_id VARCHAR;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS monday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS tuesday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS wednesday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS thursday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS friday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS saturday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS sunday INTEGER;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS start_date VARCHAR;
+ALTER TABLE calendar ADD COLUMN IF NOT EXISTS end_date VARCHAR;
+
+CREATE TEMP TABLE calendar_temp AS SELECT * FROM calendar;
+DROP TABLE calendar;
+
+CREATE TABLE calendar AS
+SELECT
+  CAST(ROW_NUMBER() OVER () AS INTEGER) AS row_id,
+  TRY_CAST(service_id AS VARCHAR) AS service_id,
+  COALESCE(TRY_CAST(monday AS INTEGER), 0) AS monday,
+  COALESCE(TRY_CAST(tuesday AS INTEGER), 0) AS tuesday,
+  COALESCE(TRY_CAST(wednesday AS INTEGER), 0) AS wednesday,
+  COALESCE(TRY_CAST(thursday AS INTEGER), 0) AS thursday,
+  COALESCE(TRY_CAST(friday AS INTEGER), 0) AS friday,
+  COALESCE(TRY_CAST(saturday AS INTEGER), 0) AS saturday,
+  COALESCE(TRY_CAST(sunday AS INTEGER), 0) AS sunday,
+  TRY_CAST(start_date AS VARCHAR) AS start_date,
+  TRY_CAST(end_date AS VARCHAR) AS end_date
+FROM calendar_temp;
+
+DROP TABLE IF EXISTS calendar_temp;

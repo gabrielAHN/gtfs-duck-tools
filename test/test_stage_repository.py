@@ -25,7 +25,11 @@ class StageRepositoryTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         self.inputs = []
-        for target, version, platform in [('native', 'v1.5.4', 'osx_arm64'), ('wasm', 'v1.4.3', 'wasm_eh'), ('wasm', 'v1.4.3', 'wasm_mvp')]:
+        for target, version, platform in [
+            ('native', 'v1.5.4', 'osx_arm64'),
+            ('wasm', 'v1.4.3', 'wasm_eh'),
+            ('wasm', 'v1.4.3', 'wasm_mvp'),
+        ]:
             path = self.base / platform
             path.write_bytes(fixture(platform, version))
             self.inputs.append([target, version, platform, str(path)])
@@ -37,7 +41,21 @@ class StageRepositoryTests(unittest.TestCase):
         return subprocess.run(args, capture_output=True, text=True)
 
     def test_rejects_invalid_inputs_before_creating_output(self):
-        cases = ['missing', 'truncated', 'version', 'platform', 'header', 'abi', 'signed', 'prefix', 'magic', 'padding', 'target', 'traversal', 'duplicate']
+        cases = [
+            'missing',
+            'truncated',
+            'version',
+            'platform',
+            'header',
+            'abi',
+            'signed',
+            'prefix',
+            'magic',
+            'padding',
+            'target',
+            'traversal',
+            'duplicate',
+        ]
         for case in cases:
             with self.subTest(case=case):
                 path = Path(self.inputs[-1][-1])
@@ -49,14 +67,20 @@ class StageRepositoryTests(unittest.TestCase):
                 elif case == 'truncated':
                     path.write_bytes(b'bad')
                 elif case in ['version', 'platform', 'target']:
-                    self.inputs[-1][{'target': 0, 'version': 1, 'platform': 2}[case]] = {'target': 'native', 'version': 'v1.5.4', 'platform': 'wasm_eh'}[case]
+                    self.inputs[-1][{'target': 0, 'version': 1, 'platform': 2}[case]] = {
+                        'target': 'native',
+                        'version': 'v1.5.4',
+                        'platform': 'wasm_eh',
+                    }[case]
                 elif case == 'traversal':
                     self.inputs[-1][1] = '../escape'
                 elif case == 'duplicate':
                     self.inputs.append(self.inputs[-1][:])
                 else:
                     data = bytearray(original)
-                    index = {'header': -288, 'abi': -416, 'signed': -1, 'prefix': -513, 'magic': 0, 'padding': -289}[case]
+                    index = {'header': -288, 'abi': -416, 'signed': -1, 'prefix': -513, 'magic': 0, 'padding': -289}[
+                        case
+                    ]
                     data[index] = 65
                     path.write_bytes(data)
                 result = self.run_stage(case)
@@ -85,7 +109,7 @@ class StageRepositoryTests(unittest.TestCase):
         self.assertEqual((one / 'manifest.json').read_bytes(), (two / 'manifest.json').read_bytes())
         for item, (target, version, platform, source) in zip(manifest['artifacts'], self.inputs):
             suffix = '.gz' if target == 'native' else '.wasm'
-            self.assertEqual(item['path'], f'{version}/{platform}/gtfs_duck_tools.duckdb_extension{suffix}')
+            self.assertEqual(item['path'], f'{version}/{platform}/gtfs.duckdb_extension{suffix}')
             data = (one / item['path']).read_bytes()
             self.assertEqual(data, (two / item['path']).read_bytes())
             self.assertEqual(item['sha256'], hashlib.sha256(data).hexdigest())

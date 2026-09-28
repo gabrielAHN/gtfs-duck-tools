@@ -10,11 +10,11 @@ Run from the extension repository root with Python 3. The output directory must 
 python3 scripts/stage-repository.py \
   --output build/staged-repository \
   --artifact native v1.5.4 osx_arm64 \
-    build/release/extension/gtfs_duck_tools/gtfs_duck_tools.duckdb_extension \
+    build/release/extension/gtfs/gtfs.duckdb_extension \
   --artifact wasm v1.4.3 wasm_eh \
-    build/wasm_eh/extension/gtfs_duck_tools/gtfs_duck_tools.duckdb_extension.wasm \
+    build/wasm_eh/extension/gtfs/gtfs.duckdb_extension.wasm \
   --artifact wasm v1.4.3 wasm_mvp \
-    build/wasm_mvp/extension/gtfs_duck_tools/gtfs_duck_tools.duckdb_extension.wasm
+    build/wasm_mvp/extension/gtfs/gtfs.duckdb_extension.wasm
 ```
 
 Each `--artifact` takes `TARGET VERSION PLATFORM FILE`. Versions and platforms must be observed from the clients, not inferred from build directory names. Native `SELECT version()` and `PRAGMA platform` returned `v1.5.4` and **`osx_arm64`**. The real browser engines returned `v1.4.3`, requesting the `wasm_eh` and `wasm_mvp` paths below. There is no extra `duckdb-wasm` directory in these custom-repository requests.
@@ -22,9 +22,9 @@ Each `--artifact` takes `TARGET VERSION PLATFORM FILE`. Versions and platforms m
 ```text
 build/staged-repository/
   manifest.json
-  v1.5.4/osx_arm64/gtfs_duck_tools.duckdb_extension.gz
-  v1.4.3/wasm_eh/gtfs_duck_tools.duckdb_extension.wasm
-  v1.4.3/wasm_mvp/gtfs_duck_tools.duckdb_extension.wasm
+  v1.5.4/osx_arm64/gtfs.duckdb_extension.gz
+  v1.4.3/wasm_eh/gtfs.duckdb_extension.wasm
+  v1.4.3/wasm_mvp/gtfs.duckdb_extension.wasm
 ```
 
 Before creating output, the tool reads every input and checks the footer format from `extension-ci-tools/scripts/append_extension_metadata.py`: the `duckdb_signature` custom-section prefix, eight 32-byte padded ASCII fields, `4` identifier, `CPP` ABI, engine version, platform, nonempty extension version, reserved fields, and 256 zero signature bytes. It checks the native Mach-O or WASM binary magic as well. Missing, truncated, mismatched, nonzero-signature, unsupported, and duplicate inputs fail. Invalid arguments cannot introduce path traversal. This validates declared compatibility, not the authenticity of executable code; the footer does not encode the extension name. Only stage trusted local builds, and verify execution separately.
@@ -42,17 +42,16 @@ python3 -m unittest discover -s test -p 'test_stage_repository.py' -v
 
 GTFS_STAGED_REPOSITORY="$PWD/build/staged-repository" \
 DUCKDB_BIN=/path/to/standalone-duckdb-1.5.4 \
-GTFS_VIZ_ROOT=/path/to/gtfs-viz \
 python3 -m unittest discover -s test -p 'test_staged_repository_integration.py' -v
 ```
 
-Set `TMPDIR` to your scratch directory if your environment requires it. Integration tests skip explicitly when their environment inputs are absent. `GTFS_VIZ_ROOT` must have the existing DuckDB-WASM, esbuild, and Playwright dependencies installed, including Chromium. No dependency installation or application modification is performed by these tests.
+Set `TMPDIR` to your scratch directory if your environment requires it. Integration tests skip explicitly when their environment inputs are absent. The browser case needs `npm ci` and a Playwright Chromium install in this repository.
 
 The integration suite:
 
 - Serves the actual staged tree over loopback HTTP, downloads all three files, verifies sizes and SHA-256 checksums, and verifies decompressed native bytes against their original checksum.
 - Queries the standalone native client's engine version/platform, sets both home and extension directories to fresh temporary locations, performs HTTP `INSTALL` and `LOAD`, checks the `Bus` query result, observes the exact requested path, and checks the installed cache's SHA-256.
-- Copies `test/test_wasm.mjs` to a temporary directory, changes only its repository file source and root resolution, then runs its existing unsigned-positive EH/MVP cases in real Chromium. The app and repository use different loopback origins with CORS. All 65 macros, lifecycle, shortest path, pending edits, route types, and non-destructive load assertions remain intact. Neither the core harness nor the sibling app is modified.
+- Copies `test/test_wasm.mjs` to a temporary directory, changes only its repository file source and root resolution, then runs its existing unsigned-positive EH/MVP cases in real Chromium. The app and repository use different loopback origins with CORS. All 65 macros, lifecycle, shortest path, pending edits, route types, and non-destructive load assertions remain intact.
 
 To compare two complete real staging runs, repeat the staging command with `--output build/staged-repository-repeat` and run:
 
@@ -70,7 +69,7 @@ The plain Python server is for native/download checks; the browser integration s
 
 ## Verified local result
 
-The unit suite passed, including 13 invalid-input subcases, deterministic output, and refusal to overwrite an existing tree. All three integration tests passed using the staged real artifacts. Chromium `147.0.7727.15` passed both browser variants; the standalone native CLI downloaded from `/v1.5.4/osx_arm64/gtfs_duck_tools.duckdb_extension.gz` into a clean cache and returned `Bus`. Every artifact HTTP download returned 200 and matched the manifest. A second real staging run was byte-identical across all four files, including the manifest.
+The unit suite passed, including 13 invalid-input subcases, deterministic output, and refusal to overwrite an existing tree. All three integration tests passed using the staged real artifacts. Chromium `147.0.7727.15` passed both browser variants; the standalone native CLI downloaded from `/v1.5.4/osx_arm64/gtfs.duckdb_extension.gz` into a clean cache and returned `Bus`. Every artifact HTTP download returned 200 and matched the manifest. A second real staging run was byte-identical across all four files, including the manifest.
 
 Served-byte SHA-256:
 

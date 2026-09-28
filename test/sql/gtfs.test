@@ -1,4 +1,7 @@
-require gtfs_duck_tools
+# name: test/sql/gtfs.test
+# group: [sql]
+
+require gtfs
 
 query T
 SELECT route_type_to_name(3);

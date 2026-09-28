@@ -31,32 +31,54 @@ class NativeExtensionTests(unittest.TestCase):
             self.query("SELECT route_type_to_name(3) AS name"),
             [{"name": "Bus"}],
         )
+
     def test_all_route_types_and_unknowns(self):
-        rows = self.query("SELECT route_type_to_name(i) AS name FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(11),(12),(99),(NULL)) t(i)")
-        self.assertEqual([row["name"] for row in rows], [
-            "Tram, Streetcar, Light rail", "Subway, Metro", "Rail", "Bus", "Ferry",
-            "Cable tram", "Aerial lift", "Funicular", "Trolleybus", "Monorail", "Other", "Other",
-        ])
+        rows = self.query(
+            "SELECT route_type_to_name(i) AS name FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(11),(12),(99),(NULL)) t(i)"
+        )
+        self.assertEqual(
+            [row["name"] for row in rows],
+            [
+                "Tram, Streetcar, Light rail",
+                "Subway, Metro",
+                "Rail",
+                "Bus",
+                "Ferry",
+                "Cable tram",
+                "Aerial lift",
+                "Funicular",
+                "Trolleybus",
+                "Monorail",
+                "Other",
+                "Other",
+            ],
+        )
 
     def test_load_creates_no_user_tables(self):
         self.assertEqual(self.query("SELECT count(*) AS n FROM information_schema.tables"), [{"n": 0}])
 
     def test_repeated_load_preserves_user_data(self):
         extension = str(Path(os.environ["GTFS_EXTENSION"]).resolve()).replace("'", "''")
-        self.assertEqual(self.query(
-            f"CREATE TABLE user_data AS SELECT 42 AS value; LOAD '{extension}'; "
-            "SELECT value, route_type_to_name(3) AS name FROM user_data"
-        ), [{"value": 42, "name": "Bus"}])
+        self.assertEqual(
+            self.query(
+                f"CREATE TABLE user_data AS SELECT 42 AS value; LOAD '{extension}'; "
+                "SELECT value, route_type_to_name(3) AS name FROM user_data"
+            ),
+            [{"value": 42, "name": "Bus"}],
+        )
 
     def test_function_registered_in_system_catalog(self):
-        rows = self.query("SELECT database_name, internal, function_type FROM duckdb_functions() WHERE function_name='route_type_to_name'")
+        rows = self.query(
+            "SELECT database_name, internal, function_type FROM duckdb_functions() WHERE function_name='route_type_to_name'"
+        )
         self.assertEqual(rows, [{"database_name": "system", "internal": True, "function_type": "macro"}])
 
     def test_unsigned_artifact_rejected_by_default(self):
         extension = str(Path(os.environ["GTFS_EXTENSION"]).resolve()).replace("'", "''")
         result = subprocess.run(
             [os.environ["DUCKDB_BIN"], ":memory:", "-c", f"LOAD '{extension}'"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unsigned", result.stderr.lower())
@@ -67,7 +89,7 @@ class NativeExtensionTests(unittest.TestCase):
         platform = self.query("PRAGMA platform")[0]["platform"]
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            artifact = base / "repository" / version / platform / "gtfs_duck_tools.duckdb_extension.gz"
+            artifact = base / "repository" / version / platform / "gtfs.duckdb_extension.gz"
             artifact.parent.mkdir(parents=True)
             artifact.write_bytes(gzip.compress(Path(os.environ["GTFS_EXTENSION"]).read_bytes()))
             handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(base / "repository"))
@@ -79,13 +101,15 @@ class NativeExtensionTests(unittest.TestCase):
                 sql = (
                     f"SET home_directory='{str(base).replace(chr(39), chr(39) * 2)}'; "
                     f"SET extension_directory='{cache}'; "
-                    f"INSTALL gtfs_duck_tools FROM 'http://127.0.0.1:{server.server_port}'; "
-                    "LOAD gtfs_duck_tools; SELECT route_type_to_name(3) AS name;"
+                    f"INSTALL gtfs FROM 'http://127.0.0.1:{server.server_port}'; "
+                    "LOAD gtfs; SELECT route_type_to_name(3) AS name;"
                 )
-                result = subprocess.run([binary, "-unsigned", "-json", ":memory:", "-c", sql], capture_output=True, text=True)
+                result = subprocess.run(
+                    [binary, "-unsigned", "-json", ":memory:", "-c", sql], capture_output=True, text=True
+                )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout), [{"name": "Bus"}])
-                self.assertTrue(list((base / "cache").rglob("gtfs_duck_tools.duckdb_extension")))
+                self.assertTrue(list((base / "cache").rglob("gtfs.duckdb_extension")))
             finally:
                 server.shutdown()
                 server.server_close()

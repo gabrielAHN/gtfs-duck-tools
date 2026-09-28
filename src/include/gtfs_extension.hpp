@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-class GtfsDuckToolsExtension : public Extension {
+class GtfsExtension : public Extension {
 public:
 	void Load(ExtensionLoader &db) override;
 	std::string Name() override;

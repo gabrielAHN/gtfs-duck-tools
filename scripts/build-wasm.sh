@@ -26,5 +26,5 @@ for variant in eh mvp; do
     -DDUCKDB_EXPLICIT_PLATFORM="wasm_$variant" -DDUCKDB_CUSTOM_PLATFORM="wasm_$variant" \
     -DCMAKE_CXX_FLAGS="$flags" -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-  cmake --build "$root/build/wasm_$variant" --target gtfs_duck_tools_loadable_extension -j 4
+  cmake --build "$root/build/wasm_$variant" --target gtfs_loadable_extension -j 4
 done

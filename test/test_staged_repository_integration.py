@@ -49,7 +49,9 @@ class StagedRepositoryIntegrationTests(unittest.TestCase):
                 requests.append(self.path)
                 super().do_GET()
 
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=str(self.repository)))
+        server = http.server.ThreadingHTTPServer(
+            ('127.0.0.1', 0), functools.partial(Handler, directory=str(self.repository))
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -57,42 +59,64 @@ class StagedRepositoryIntegrationTests(unittest.TestCase):
                 base = Path(directory)
                 cache = base / 'cache'
                 binary = os.environ['DUCKDB_BIN']
-                probe = subprocess.run([binary, '-json', ':memory:', '-c', 'SELECT version() AS version; PRAGMA platform;'], text=True, capture_output=True, check=True)
+                probe = subprocess.run(
+                    [binary, '-json', ':memory:', '-c', 'SELECT version() AS version; PRAGMA platform;'],
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                )
                 decoder = json.JSONDecoder()
                 version_rows, end = decoder.raw_decode(probe.stdout)
                 platform_rows = json.loads(probe.stdout[end:])
                 version = version_rows[0]['version']
                 platform = platform_rows[0]['platform']
                 quoted = lambda value: str(value).replace("'", "''")
-                sql = f"SET home_directory='{quoted(base)}'; SET extension_directory='{quoted(cache)}'; INSTALL gtfs_duck_tools FROM 'http://127.0.0.1:{server.server_port}'; LOAD gtfs_duck_tools; SELECT route_type_to_name(3) AS name;"
-                result = subprocess.run([binary, '-unsigned', '-json', ':memory:', '-c', sql], text=True, capture_output=True, timeout=60)
+                sql = f"SET home_directory='{quoted(base)}'; SET extension_directory='{quoted(cache)}'; INSTALL gtfs FROM 'http://127.0.0.1:{server.server_port}'; LOAD gtfs; SELECT route_type_to_name(3) AS name;"
+                result = subprocess.run(
+                    [binary, '-unsigned', '-json', ':memory:', '-c', sql], text=True, capture_output=True, timeout=60
+                )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout), [{'name': 'Bus'}])
-                expected = f'{version}/{platform}/gtfs_duck_tools.duckdb_extension.gz'
+                expected = f'{version}/{platform}/gtfs.duckdb_extension.gz'
                 self.assertIn('/' + expected, requests)
                 item = next(item for item in self.manifest['artifacts'] if item['path'] == expected)
-                installed = list(cache.rglob('gtfs_duck_tools.duckdb_extension'))
+                installed = list(cache.rglob('gtfs.duckdb_extension'))
                 self.assertEqual(len(installed), 1)
                 self.assertEqual(hashlib.sha256(installed[0].read_bytes()).hexdigest(), item['source_sha256'])
-                print(json.dumps(dict(native='PASS', version=version, platform=platform, requests=requests, query=json.loads(result.stdout))))
+                print(
+                    json.dumps(
+                        dict(
+                            native='PASS',
+                            version=version,
+                            platform=platform,
+                            requests=requests,
+                            query=json.loads(result.stdout),
+                        )
+                    )
+                )
         finally:
             server.shutdown()
             server.server_close()
             thread.join()
 
-    @unittest.skipUnless(os.environ.get('GTFS_VIZ_ROOT'), 'Set GTFS_VIZ_ROOT for installed Playwright/esbuild/DuckDB-WASM')
+    @unittest.skipUnless((ROOT / 'node_modules/@playwright/test').exists(), 'Run npm ci for browser test dependencies')
     def test_chromium_staged_eh_and_mvp(self):
         source = (ROOT / 'test/test_wasm.mjs').read_text()
         old_root = "const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');"
-        old_file = 'resolve(root, `build/wasm_${match[1]}/extension/gtfs_duck_tools/gtfs_duck_tools.duckdb_extension.wasm`)'
+        old_file = 'resolve(root, `build/wasm_${match[1]}/extension/gtfs/gtfs.duckdb_extension.wasm`)'
         self.assertEqual(source.count(old_root), 1)
         self.assertEqual(source.count(old_file), 1)
         source = source.replace(old_root, f'const root = {json.dumps(str(ROOT))};')
-        source = source.replace(old_file, f'resolve({json.dumps(str(self.repository))}, `v1.4.3/wasm_${{match[1]}}/gtfs_duck_tools.duckdb_extension.wasm`)')
+        source = source.replace(
+            old_file,
+            f'resolve({json.dumps(str(self.repository))}, `v1.4.3/wasm_${{match[1]}}/gtfs.duckdb_extension.wasm`)',
+        )
         with tempfile.TemporaryDirectory() as directory:
             harness = Path(directory) / 'staged-wasm.mjs'
             harness.write_text(source)
-            result = subprocess.run(['node', str(harness), '--unsigned-only'], text=True, capture_output=True, timeout=180)
+            result = subprocess.run(
+                ['node', str(harness), '--unsigned-only'], text=True, capture_output=True, timeout=180
+            )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         print(result.stdout)
         summary = json.loads(result.stdout.strip().splitlines()[-1])
@@ -100,7 +124,7 @@ class StagedRepositoryIntegrationTests(unittest.TestCase):
         self.assertEqual(summary['scope'], 'unsigned-development-only')
         self.assertEqual(summary['cases'], 2)
         for platform in ['wasm_eh', 'wasm_mvp']:
-            self.assertIn(f'/v1.4.3/{platform}/gtfs_duck_tools.duckdb_extension.wasm', summary['requests'])
+            self.assertIn(f'/v1.4.3/{platform}/gtfs.duckdb_extension.wasm', summary['requests'])
 
 
 if __name__ == '__main__':
