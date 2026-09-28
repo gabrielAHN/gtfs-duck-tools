@@ -58,7 +58,7 @@ def stage(output, artifacts):
                 stream.write(original)
             data = buffer.getvalue()
         suffix = '.gz' if target == 'native' else '.wasm'
-        path = f'{version}/{platform}/gtfs_duck_tools.duckdb_extension{suffix}'
+        path = f'{version}/{platform}/gtfs.duckdb_extension{suffix}'
         destination = output / path
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(data)

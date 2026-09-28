@@ -6,8 +6,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const vizRoot = resolve(process.env.GTFS_VIZ_ROOT || resolve(root, '../gtfs-viz'));
-const require = createRequire(resolve(vizRoot, 'package.json'));
+const require = createRequire(resolve(root, 'package.json'));
 const { chromium } = require('@playwright/test');
 const wasmDist = dirname(require.resolve('@duckdb/duckdb-wasm/dist/duckdb-browser.mjs'));
 const { build } = require('esbuild');
@@ -42,10 +41,10 @@ const origin = `http://127.0.0.1:${app.address().port}`;
 const repo = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', origin);
   requests.push(req.url);
-  const match = /^\/(?:duckdb-wasm\/)?v1\.4\.3\/wasm_(eh|mvp)\/gtfs_duck_tools\.duckdb_extension\.wasm$/.exec(req.url);
+  const match = /^\/(?:duckdb-wasm\/)?v1\.4\.3\/wasm_(eh|mvp)\/gtfs\.duckdb_extension\.wasm$/.exec(req.url);
   try {
     if (!match) { res.writeHead(404); res.end(); return; }
-    await serveFile(res, resolve(root, `build/wasm_${match[1]}/extension/gtfs_duck_tools/gtfs_duck_tools.duckdb_extension.wasm`));
+    await serveFile(res, resolve(root, `build/wasm_${match[1]}/extension/gtfs/gtfs.duckdb_extension.wasm`));
   } catch (error) { res.writeHead(500); res.end(String(error)); }
 });
 await new Promise(resolve => repo.listen(0, '127.0.0.1', resolve));
@@ -92,14 +91,14 @@ try {
           }
           const started = performance.now();
           console.log('GTFS_STAGE:install');
-          await conn.query(`INSTALL gtfs_duck_tools FROM '${repository}'`);
+          await conn.query(`INSTALL gtfs FROM '${repository}'`);
           console.log('GTFS_STAGE:load');
-          try { await conn.query('LOAD gtfs_duck_tools'); }
+          try { await conn.query('LOAD gtfs'); }
           catch (error) { return { variant, allowUnsignedExtensions, engine, missingBeforeLoad, loadError: String(error) }; }
           const values = await rows("SELECT route_type_to_name(i) AS name FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(11),(12),(99),(NULL)) t(i)");
           const tables = await rows('SELECT count(*) AS n FROM information_schema.tables');
           await conn.query('CREATE TABLE user_data AS SELECT 42 AS value');
-          await conn.query('LOAD gtfs_duck_tools');
+          await conn.query('LOAD gtfs');
           const preserved = await rows('SELECT value, route_type_to_name(3) AS name FROM user_data');
           const registered = await rows(`SELECT function_name FROM duckdb_functions() WHERE database_name='system' AND function_name IN (${macroNames.map(name => `'${name}'`).join(',')}) ORDER BY function_name`);
           console.log('GTFS_STAGE:dataset lifecycle');

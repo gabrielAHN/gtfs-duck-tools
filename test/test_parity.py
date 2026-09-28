@@ -25,11 +25,10 @@ QUERIES = {
 }
 
 
-@unittest.skipUnless(os.environ.get("GTFS_LEGACY_HEADER"), "Set GTFS_LEGACY_HEADER for migration parity checks")
 class LegacyParityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        text = Path(os.environ["GTFS_LEGACY_HEADER"]).read_text()
+        text = Path(os.environ.get("GTFS_LEGACY_HEADER", ROOT / "test/fixtures/legacy-gtfs_sql.hpp.txt")).read_text()
         sections = re.split(r'static const char \*GTFS_\w+_SQL\s*=', text)[1:]
         cls.blocks = [''.join(re.findall(r'R"SQL\((.*?)\)SQL"', section, re.S)) for section in sections]
         if len(cls.blocks) != 3:
@@ -45,15 +44,30 @@ class LegacyParityTests(unittest.TestCase):
         prelude = config + "LOAD spatial;" + ("" if legacy else f"LOAD '{extension}';")
         setup = self.blocks[0] + FIXTURE + self.blocks[1] + self.blocks[2] if legacy else FIXTURE + "PRAGMA gtfs_init;"
         result = subprocess.run(
-            [os.environ.get("DUCKDB_BIN", "duckdb"), "-unsigned", "-json", "-cmd", prelude, ":memory:", "-c", setup + sql],
-            capture_output=True, text=True, timeout=60,
+            [
+                os.environ.get("DUCKDB_BIN", "duckdb"),
+                "-unsigned",
+                "-json",
+                "-cmd",
+                prelude,
+                ":memory:",
+                "-c",
+                setup + sql,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
     def test_all_legacy_macros_registered_in_system_catalog(self):
         names_sql = ",".join("'" + name + "'" for name in self.names)
-        rows = self.execute("SELECT function_name FROM duckdb_functions() WHERE database_name='system' AND function_name IN (" + names_sql + ") ORDER BY function_name")
+        rows = self.execute(
+            "SELECT function_name FROM duckdb_functions() WHERE database_name='system' AND function_name IN ("
+            + names_sql
+            + ") ORDER BY function_name"
+        )
         self.assertEqual([row["function_name"] for row in rows], self.names)
 
     def test_extracted_sql_is_identical_to_original(self):
@@ -67,6 +81,7 @@ def parity_test(sql):
         expected = self.execute(sql, legacy=True)
         self.assertTrue(expected, "Fixture must exercise a nonempty result")
         self.assertEqual(self.execute(sql), expected)
+
     return test
 
 
