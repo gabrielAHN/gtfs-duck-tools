@@ -1,0 +1,21 @@
+require gtfs_duck_tools
+
+query T
+SELECT route_type_to_name(3);
+----
+Bus
+
+query T
+SELECT route_type_to_name(NULL);
+----
+Other
+
+query I
+SELECT count(*) FROM information_schema.tables;
+----
+0
+
+query T
+SELECT database_name FROM duckdb_functions() WHERE function_name = 'route_type_to_name';
+----
+system
