@@ -9,12 +9,15 @@ import re
 
 STATUS = 'UNSIGNED DEVELOPMENT-ONLY'
 PREFIX = b'\x00\x93\x04\x10duckdb_signature\x80\x04'
+NATIVE = {'linux_amd64', 'linux_arm64', 'osx_amd64', 'osx_arm64', 'windows_amd64', 'windows_amd64_mingw'}
+WASM = {'wasm_eh', 'wasm_mvp'}
+MAGIC = {'wasm': b'\x00asm\x01\x00\x00\x00', 'osx': b'\xcf\xfa\xed\xfe', 'linux': b'\x7fELF', 'windows': b'MZ'}
 
 
 def validate(target, version, platform, source):
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', version):
         raise ValueError(f'Invalid engine version: {version}')
-    if (target, platform) not in {('native', 'osx_arm64'), ('wasm', 'wasm_eh'), ('wasm', 'wasm_mvp')}:
+    if platform not in {'native': NATIVE, 'wasm': WASM}.get(target, set()):
         raise ValueError(f'Unsupported target/platform: {target}/{platform}')
     data = Path(source).read_bytes()
     if len(data) < 512 + len(PREFIX) or data[-512-len(PREFIX):-512] != PREFIX:
@@ -32,7 +35,7 @@ def validate(target, version, platform, source):
         raise ValueError(f'{source}: metadata mismatch: expected {version}/{platform}, found {fields[5]}/{fields[6]}')
     if data[-256:] != bytes(256):
         raise ValueError(f'{source}: nonzero signature; this tool only stages unsigned development artifacts')
-    magic = b'\x00asm\x01\x00\x00\x00' if target == 'wasm' else b'\xcf\xfa\xed\xfe'
+    magic = MAGIC[platform.split('_')[0]]
     if not data.startswith(magic):
         raise ValueError(f'{source}: binary format does not match target')
     return data, fields[4]

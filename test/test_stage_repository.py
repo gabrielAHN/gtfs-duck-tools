@@ -13,9 +13,12 @@ SCRIPT = ROOT / 'scripts/stage-repository.py'
 PREFIX = b'\x00\x93\x04\x10duckdb_signature\x80\x04'
 
 
+MAGIC = {'wasm': b'\x00asm\x01\x00\x00\x00', 'osx': b'\xcf\xfa\xed\xfe', 'linux': b'\x7fELF', 'windows': b'MZ'}
+
+
 def fixture(platform, version):
     fields = ['', '', '', 'CPP', 'test', version, platform, '4']
-    body = b'\x00asm\x01\x00\x00\x00' if platform.startswith('wasm_') else b'\xcf\xfa\xed\xfe'
+    body = MAGIC[platform.split('_')[0]]
     return body + PREFIX + b''.join(s.encode().ljust(32, b'\0') for s in fields) + bytes(256)
 
 
@@ -125,6 +128,42 @@ class StageRepositoryTests(unittest.TestCase):
             self.assertEqual(gzip.decompress(data) if target == 'native' else data, original)
             if target == 'native':
                 self.assertEqual(data[3:8], bytes(5))
+
+    def test_stages_every_native_ci_platform(self):
+        self.inputs = []
+        for platform in [
+            'linux_amd64',
+            'linux_arm64',
+            'osx_amd64',
+            'osx_arm64',
+            'windows_amd64',
+            'windows_amd64_mingw',
+        ]:
+            path = self.base / platform
+            path.write_bytes(fixture(platform, 'v1.5.4'))
+            self.inputs.append(['native', 'v1.5.4', platform, str(path)])
+        result = self.run_stage('native')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads((self.base / 'native' / 'manifest.json').read_text())
+        self.assertEqual(
+            [item['path'] for item in manifest['artifacts']],
+            [f'v1.5.4/{item[2]}/gtfs.duckdb_extension.gz' for item in self.inputs],
+        )
+
+    def test_rejects_binary_format_of_another_platform(self):
+        for platform, other in [
+            ('linux_amd64', 'osx_arm64'),
+            ('windows_amd64', 'linux_amd64'),
+            ('osx_arm64', 'windows_amd64'),
+        ]:
+            with self.subTest(platform=platform):
+                path = self.base / f'{platform}-as-{other}'
+                data = fixture(platform, 'v1.5.4')
+                path.write_bytes(MAGIC[other.split('_')[0]] + data[len(MAGIC[platform.split('_')[0]]) :])
+                self.inputs = [['native', 'v1.5.4', platform, str(path)]]
+                result = self.run_stage(f'wrong-{platform}')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('binary format', result.stderr)
 
 
 if __name__ == '__main__':

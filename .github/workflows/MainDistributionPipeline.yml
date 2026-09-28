@@ -1,22 +1,32 @@
-#
-# This workflow calls the main distribution pipeline from DuckDB to build, test and (optionally) release the extension
-#
 name: Main Extension Distribution Pipeline
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' && github.sha || '' }}
   cancel-in-progress: true
 
 jobs:
   duckdb-stable-build:
-    name: Build extension binaries
+    name: Build native binaries (DuckDB v1.5.4)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
       duckdb_version: v1.5.4
       ci_tools_version: v1.5-variegata
       extension_name: gtfs
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+
+  duckdb-wasm-build:
+    name: Build browser binaries (DuckDB-WASM v1.4.3)
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4.3
+    with:
+      duckdb_version: v1.4.3
+      ci_tools_version: v1.4.3
+      extension_name: gtfs
+      exclude_archs: 'linux_amd64;linux_arm64;linux_amd64_musl;osx_amd64;osx_arm64;windows_amd64;windows_amd64_mingw;wasm_threads'
 
   code-quality-check:
     name: Code Quality Check
@@ -26,3 +36,92 @@ jobs:
       ci_tools_version: v1.5-variegata
       extension_name: gtfs
       format_checks: 'format;tidy'
+
+  test-artifacts:
+    name: Test built artifacts
+    needs: [duckdb-stable-build, duckdb-wasm-build]
+    runs-on: ubuntu-24.04
+    env:
+      GTFS_EXTENSION: ${{ github.workspace }}/build/release/extension/gtfs/gtfs.duckdb_extension
+      DUCKDB_BIN: ${{ github.workspace }}/build/duckdb-cli/duckdb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gtfs-v1.5.4-extension-*
+          path: build/native
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gtfs-v1.4.3-extension-wasm_*
+          path: build/wasm
+
+      - name: Arrange artifacts
+        run: |
+          mkdir -p build/release/extension/gtfs build/wasm_eh/extension/gtfs build/wasm_mvp/extension/gtfs
+          cp build/native/gtfs-v1.5.4-extension-linux_amd64/gtfs.duckdb_extension "$GTFS_EXTENSION"
+          for variant in eh mvp; do
+            cp "build/wasm/gtfs-v1.4.3-extension-wasm_$variant/gtfs.duckdb_extension.wasm" "build/wasm_$variant/extension/gtfs/"
+          done
+          find build/native build/wasm -type f | sort
+
+      - name: Install DuckDB CLI v1.5.4 and spatial
+        run: |
+          mkdir -p build/duckdb-cli
+          curl -fsSL -o build/duckdb-cli/cli.zip https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+          unzip -q build/duckdb-cli/cli.zip -d build/duckdb-cli
+          echo "$GITHUB_WORKSPACE/build/duckdb-cli" >> "$GITHUB_PATH"
+          echo "GTFS_DEPENDENCY_CACHE=$HOME/.duckdb/extensions" >> "$GITHUB_ENV"
+          "$DUCKDB_BIN" :memory: -c "INSTALL spatial; SELECT version(); PRAGMA platform;"
+
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Native tests
+        run: python3 -m unittest discover -s test -p 'test_*.py' -v
+
+      - name: Corridor tests
+        run: npm run test:js
+
+      - name: Browser tests (unsigned development loading)
+        run: npm run test:wasm:unsigned
+
+      - name: Stage unsigned development repository
+        run: |
+          args=()
+          for dir in build/native/gtfs-v1.5.4-extension-*; do
+            platform="${dir##*-extension-}"
+            args+=(--artifact native v1.5.4 "$platform" "$dir/gtfs.duckdb_extension")
+          done
+          for variant in eh mvp; do
+            args+=(--artifact wasm v1.4.3 "wasm_$variant" "build/wasm_$variant/extension/gtfs/gtfs.duckdb_extension.wasm")
+          done
+          python3 scripts/stage-repository.py --output build/staged-repository "${args[@]}"
+          cat build/staged-repository/manifest.json
+
+      - name: Staged repository tests
+        env:
+          GTFS_STAGED_REPOSITORY: ${{ github.workspace }}/build/staged-repository
+        run: python3 -m unittest discover -s test -p 'test_staged_repository_integration.py' -v
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gtfs-unsigned-development-repository
+          path: build/staged-repository
+          if-no-files-found: error
+
+      - name: Strict browser signature check (known DuckDB-WASM MVP failure)
+        continue-on-error: true
+        run: npm run test:wasm
