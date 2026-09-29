@@ -9,12 +9,12 @@ extension:
     - gabrielAHN
 
 repo:
-  github: gabrielAHN/gtfs-duckdb-extension
+  github: gabrielAHN/gtfs-duckdb
   ref: REPLACE_WITH_MERGED_MAIN_COMMIT
 
 docs:
   hello_world: |
     SELECT route_type_to_name(3);
   extended_description: |
-    GTFS DuckDB Extension registers GTFS transit functions at LOAD and exposes explicit dataset lifecycle pragmas:
+    GTFS DuckDB (gtfs) registers GTFS transit functions at LOAD and exposes explicit dataset lifecycle pragmas:
     PRAGMA gtfs_prepare, PRAGMA gtfs_init and PRAGMA gtfs_refresh. Loading does not create or reset tables.

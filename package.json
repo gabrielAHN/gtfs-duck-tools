@@ -1,8 +1,8 @@
 {
-  "name": "gtfs-duckdb-extension-tests",
+  "name": "gtfs-duckdb-tests",
   "private": true,
   "type": "module",
-  "description": "Browser test dependencies for the GTFS DuckDB Extension",
+  "description": "Browser test dependencies for GTFS DuckDB",
   "license": "MIT",
   "scripts": {
     "test:wasm": "node test/test_wasm.mjs",
