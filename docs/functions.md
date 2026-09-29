@@ -1,4 +1,16 @@
-# GTFS DuckDB Extension — function reference
+# GTFS DuckDB — function reference
+
+The [docs site](https://gtfs-viz-production-f1a4.up.railway.app/docs/gtfs-duckdb/functions/) groups the functions into Import, Table functions, GTFS functions and Helpers, with examples run on the MBTA subway feed ([markdown](https://gtfs-viz-production-f1a4.up.railway.app/docs/gtfs-duckdb/functions.md)).
+
+## Import
+
+### gtfs_import(directory)
+
+Imports a GTFS feed from a directory in one call: creates the edit tables, drops the previous dataset, reads each GTFS file that exists, creates empty tables for missing optional files and builds the dataset. Pending edits are kept. `stops.txt` is required. Pass `''` for files in the working directory or, in DuckDB-WASM, files registered by name.
+
+```sql
+PRAGMA gtfs_import('feed');
+```
 
 ## Scalar Macros
 

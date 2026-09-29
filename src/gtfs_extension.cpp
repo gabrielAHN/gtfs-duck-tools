@@ -6,6 +6,8 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
 #include "duckdb/parser/parsed_data/create_macro_info.hpp"
+#include "duckdb/common/file_system.hpp"
+#include "duckdb/parser/keyword_helper.hpp"
 
 namespace duckdb {
 
@@ -117,6 +119,45 @@ static string route_cache_version(ClientContext &, const FunctionParameters &) {
 	return GTFS_ROUTE_CACHE_VERSION_SQL;
 }
 
+struct GtfsSourceFile {
+	const char *table;
+	const char *normalize;
+	const char *empty;
+};
+
+static const GtfsSourceFile GTFS_SOURCE_FILES[] = {
+    {"stops", GTFS_NORMALIZE_STOPS_SQL, nullptr},
+    {"pathways", GTFS_NORMALIZE_PATHWAYS_SQL, GTFS_EMPTY_PATHWAYS_SQL},
+    {"routes", GTFS_NORMALIZE_ROUTES_SQL, GTFS_EMPTY_ROUTES_SQL},
+    {"trips", GTFS_NORMALIZE_TRIPS_SQL, GTFS_EMPTY_TRIPS_SQL},
+    {"stop_times", GTFS_NORMALIZE_STOP_TIMES_SQL, GTFS_EMPTY_STOP_TIMES_SQL},
+    {"shapes", GTFS_NORMALIZE_SHAPES_SQL, GTFS_EMPTY_SHAPES_SQL},
+    {"calendar", GTFS_NORMALIZE_CALENDAR_SQL, GTFS_EMPTY_CALENDAR_SQL},
+    {"calendar_dates", GTFS_NORMALIZE_CALENDAR_DATES_SQL, GTFS_EMPTY_CALENDAR_DATES_SQL},
+};
+
+static string ImportDataset(ClientContext &context, const FunctionParameters &parameters) {
+	auto directory = parameters.values[0].IsNull() ? string() : StringValue::Get(parameters.values[0]);
+	auto &fs = FileSystem::GetFileSystem(context);
+	string result = DatasetStatements(GTFS_LOAD_SQL) + GTFS_DROP_SQL + "\n";
+	for (auto &file : GTFS_SOURCE_FILES) {
+		auto name = string(file.table) + ".txt";
+		auto path = directory.empty() ? name : fs.JoinPath(directory, name);
+		if (!fs.FileExists(path)) {
+			if (!file.empty) {
+				throw InvalidInputException("gtfs_import: required file %s was not found", path);
+			}
+			result += string(file.empty) + "\n";
+			continue;
+		}
+		result += "CREATE OR REPLACE TEMP TABLE " + string(file.table) + "_raw AS SELECT * FROM read_csv_auto(" +
+		          KeywordHelper::WriteQuoted(path, '\'') +
+		          ", all_varchar=true, null_padding=true, quote='\"', ignore_errors=true);\n";
+		result += string(file.normalize) + "\n";
+	}
+	return result + InitializeDataset(context, parameters);
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(PragmaFunction::PragmaStatement("gtfs_prepare_route_cache", prepare_route_cache));
 	loader.RegisterFunction(PragmaFunction::PragmaStatement("gtfs_reset_route_cache", reset_route_cache));
@@ -143,6 +184,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(PragmaFunction::PragmaStatement("gtfs_prepare", PrepareDataset));
 	loader.RegisterFunction(PragmaFunction::PragmaStatement("gtfs_init", InitializeDataset));
 	loader.RegisterFunction(PragmaFunction::PragmaStatement("gtfs_refresh", InitializeDataset));
+	loader.RegisterFunction(PragmaFunction::PragmaCall("gtfs_import", ImportDataset, {LogicalType::VARCHAR}));
 	for (auto sql : {GTFS_LOAD_SQL, GTFS_INIT_SQL, GTFS_REROUTE_SQL}) {
 		Parser parser;
 		parser.ParseQuery(sql);

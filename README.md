@@ -1,4 +1,4 @@
-# GTFS DuckDB Extension
+# GTFS DuckDB
 
 This repository is based on https://github.com/duckdb/extension-template, check it out if you want to build and ship your own DuckDB extension.
 
@@ -15,13 +15,11 @@ SELECT route_type_to_name(3);  -- Bus
 `LOAD` only registers functions. Datasets are managed explicitly:
 
 ```sql
-PRAGMA gtfs_prepare;                 -- create edit tables
--- import stops, pathways, routes, trips, stop_times, shapes, calendar, calendar_dates
-PRAGMA gtfs_init;                    -- build views, materialized tables and indexes
+PRAGMA gtfs_import('feed');          -- read a GTFS folder and build every table
 PRAGMA gtfs_refresh;                 -- rebuild after edits, keeping pending edits
 ```
 
-Raw CSV staging tables (`<table>_raw`) are normalized with `PRAGMA gtfs_normalize_<table>`; missing optional files use `PRAGMA gtfs_empty_<table>`. Route-shape caches use `gtfs_prepare_route_cache`, `gtfs_reset_route_cache` and `gtfs_route_cache_version`. Spatial geometry functions need the `spatial` extension loaded. See [docs/functions.md](docs/functions.md) for the full function reference.
+`gtfs_import` requires `stops.txt`, turns missing optional files into empty tables and keeps pending edits when a feed is imported again. Pass `''` to read files from the working directory or, in DuckDB-WASM, files registered by name. The lower-level steps it runs are also available: `gtfs_prepare` (edit tables), `gtfs_normalize_<table>` for raw `<table>_raw` staging tables, `gtfs_empty_<table>` and `gtfs_init` (views, materialized tables and indexes). Route-shape caches use `gtfs_prepare_route_cache`, `gtfs_reset_route_cache` and `gtfs_route_cache_version`. Spatial geometry functions need the `spatial` extension loaded. See the [docs](https://gtfs-viz-production-f1a4.up.railway.app/docs/gtfs-duckdb/usage/) and the [function reference](https://gtfs-viz-production-f1a4.up.railway.app/docs/gtfs-duckdb/functions/), where every example runs on a real feed, or [docs/functions.md](docs/functions.md).
 
 The extension is not yet in the DuckDB community repository, so `INSTALL gtfs FROM community` does not work yet. See [Releasing](#releasing).
 
