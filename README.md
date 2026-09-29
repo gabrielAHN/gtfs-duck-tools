@@ -85,6 +85,8 @@ The first release is **1.0.0**. There is no earlier published build.
 
 GitHub Actions (`.github/workflows/MainDistributionPipeline.yml`) runs on pull requests, pushes to `main` and manual dispatch. It builds native binaries against DuckDB v1.5.4 and `wasm_eh`/`wasm_mvp` against DuckDB-WASM v1.4.3, runs the format checks and test suites, and uploads an unsigned development repository artifact. These artifacts are for testing only.
 
+Each push to `main` also republishes the unsigned development repository as `gtfs-extension-repository.tar.gz` on the moving [`main-latest`](https://github.com/gabrielAHN/gtfs-duckdb/releases/tag/main-latest) pre-release. GTFS Viz's deploy downloads it, checks the WASM files against the SHA-256 sums in its `manifest.json` and serves them from its own `/extensions/` path; because the build is unsigned, GTFS Viz enables unsigned loading only in that deploy build.
+
 Signed distribution goes through the [DuckDB community extensions](https://duckdb.org/community_extensions/documentation) repository, whose CI builds and signs every platform:
 
 1. Merge to `main` and tag the merge commit `v1.0.0`, so built binaries report `v1.0.0` instead of a commit hash.

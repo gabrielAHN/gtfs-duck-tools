@@ -125,3 +125,29 @@ jobs:
       - name: Strict browser signature check (known DuckDB-WASM MVP failure)
         continue-on-error: true
         run: npm run test:wasm
+
+  publish-main:
+    name: Publish main build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test-artifacts
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gtfs-unsigned-development-repository
+          path: repository
+
+      - name: Publish main-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tar -czf gtfs-extension-repository.tar.gz -C repository .
+          gh release delete main-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create main-latest gtfs-extension-repository.tar.gz \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "main (unsigned development build)" \
+            --notes "Unsigned development repository built from ${GITHUB_SHA} on main. Loading it requires allowing unsigned extensions."
