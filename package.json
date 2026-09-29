@@ -1,0 +1,17 @@
+{
+  "name": "gtfs-duckdb-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser test dependencies for GTFS DuckDB",
+  "license": "MIT",
+  "scripts": {
+    "test:wasm": "node test/test_wasm.mjs",
+    "test:wasm:unsigned": "node test/test_wasm.mjs --unsigned-only",
+    "test:js": "node --test test/corridor-lanes.test.mjs test/profile-feed.test.mjs"
+  },
+  "devDependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
+    "@playwright/test": "1.59.1",
+    "esbuild": "0.28.0"
+  }
+}
